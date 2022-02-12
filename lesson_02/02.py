@@ -10,29 +10,23 @@
 import json
 
 
-def write_order_to_json(data: list):
-    print(data)
+def write_order_to_json(item: str, quantity: str, price: str, buyer: str, date: str):
+    with open('orders.json', 'r', encoding='utf-8') as orders_file:
+        file_data = json.load(orders_file)
+        orders = file_data['orders']
+        new_order = {
+            'item': item,
+            'quantity': quantity,
+            'price': price,
+            'buyer': buyer,
+            'date': date
+        }
+        orders.append(new_order)
+
     with open('orders.json', 'w', encoding='utf-8', newline='') as orders_file:
-        s = '{"orders": ' + json.dumps(data, indent=4) + '}'
-        orders_file.write(s)
+        orders_file.write(json.dumps(file_data, indent=4, ensure_ascii=False))
 
 
-write_order_to_json([{
-    'item': 'Стул',
-    'quantity': 1,
-    'price': 10,
-    'buyer': 'Стульщик',
-    'date': '05.12.21'
-},{
-    'item': 'Стол',
-    'quantity': 2,
-    'price': 20,
-    'buyer': 'Стольщик',
-    'date': '06.12.21'
-},{
-    'item': 'Гроб',
-    'quantity': 3,
-    'price': 30,
-    'buyer': 'Шкафник',
-    'date': '08.12.21'
-}])
+write_order_to_json('Стул', '1', '10', 'Стульщик', '05.12.21')
+write_order_to_json('Стол', '2', '20', 'Стольщик', '06.12.21')
+write_order_to_json('Гроб', '3', '30', 'Шкафник', '08.12.21')
