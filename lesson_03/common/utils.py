@@ -33,7 +33,7 @@ def handle_parameters(ip: str, port: int):
                     ip = p_addr
                     print(f'IP={p_addr} ', end='')
                 else:
-                    print(f'IP указан неверно: ({p_addr}) ', end='')
+                    print(f'ОШИБКА -> (IP={p_addr}) ', end='')
             # Получение и проверка PORT
             if parameter == '-p':
                 p_port = argv[i + 1]
@@ -41,7 +41,7 @@ def handle_parameters(ip: str, port: int):
                     port = p_port
                     print(f'PORT={p_port} ', end='')
                 else:
-                    print(f'PORT указан неверно: ({p_port}) ', end='')
+                    print(f'ОШИБКА -> (PORT={p_port}) ', end='')
 
     else:
         print(f'Параметры не указаны. ', end='')
