@@ -1,11 +1,8 @@
 import json
 import os
 import sys
-from pprint import pprint
 
 sys.path.append(os.path.join(os.getcwd(), '..'))
-# print('UTILS:')
-# pprint(sys.path)
 from common.globals import ENCODING, MAX_PACKAGE_LENGTH
 
 
@@ -22,29 +19,55 @@ def send_message(receiver_sock, message):
     receiver_sock.send(json.dumps(message).encode(ENCODING))
 
 
+def is_ip_bad(ip: str):
+    if not isinstance(ip, str):
+        ValueError
+    ip_list = ip.split('.')
+    return len(ip_list) != 4 or any(not n.isdecimal() or int(n) not in range(0, 255) for n in ip_list)
+
+
+def is_port_bad(port):
+    if isinstance(port, int):
+        # print(f'IS INT {1024 < port < 65535=}')
+        return not 1024 < port < 65535
+    if isinstance(port, str):
+        # print(f'IS STR {1024 < int(port) < 65535=}')
+        return not 1024 < int(port) < 65535
+    ValueError
+
+
 def handle_parameters(ip: str, port: int):
     argv = sys.argv
+    bad_ip, bad_port, result_ip, result_port = True, True, None, None
     if len(argv) > 1:
         for i, parameter in enumerate(argv):
             # Получение и проверка IP
             if parameter == '-a':
-                p_addr = argv[i + 1]
-                p_list = p_addr.split('.')
-                if len(p_list) == 4 and all(p.isdecimal() and int(p) in range(0, 255) for p in p_list):
-                    ip = p_addr
-                    print(f'IP={p_addr} ', end='')
-                else:
-                    print(f'ОШИБКА -> (IP={p_addr}) ', end='')
+                result_ip = argv[i + 1]
+                bad_ip = is_ip_bad(result_ip)
             # Получение и проверка PORT
             if parameter == '-p':
-                p_port = argv[i + 1]
-                if p_port.isdecimal() and 1024 < int(p_port) < 65535:
-                    port = p_port
-                    print(f'PORT={p_port} ', end='')
-                else:
-                    print(f'ОШИБКА -> (PORT={p_port}) ', end='')
-
-    else:
-        print(f'Параметры не указаны. ', end='')
-    print(f'| Использую: IP={ip} PORT={port}', end='')
-    return ip, int(port)
+                result_port = argv[i + 1]
+                bad_port = is_port_bad(result_port)
+        if bad_ip:
+            pass
+            # print(f' | ОШИБКА параметра запуска -> (IP={result_ip}) ', end='')
+        if bad_port:
+            pass
+            # print(f' | ОШИБКА параметра запуска -> (PORT={result_port}) ', end='')
+        else:
+            bad_port = int(bad_port)
+    # else:
+    #     print(f'Параметры запуска не указаны.', end='')
+    if bad_ip:
+        if is_ip_bad(ip):
+            # print(f' | ОШИБКА параметра переданного в ф-ю -> (IP={ip}) ', end='')
+            raise ValueError
+        result_ip = ip
+    if bad_port:
+        if is_port_bad(port):
+            # print(f' | ОШИБКА параметра переданного в ф-ю -> (PORT={port}) ', end='')
+            raise ValueError
+        result_port = port
+    # print(f'| Использую: IP={result_ip} PORT={result_port}', end='')
+    return result_ip, result_port

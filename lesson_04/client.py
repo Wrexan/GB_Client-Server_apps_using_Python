@@ -46,7 +46,7 @@ def main():
     client_sock = socket(AF_INET, SOCK_STREAM)
     ip, port = handle_parameters(ip='', port=DEF_PORT)
     if ip == '':
-        print(' | ОШИБКА: Параметр -a является обязательным. Напимер: -a 127.0.0.1')
+        # print(' | ОШИБКА: Параметр -a является обязательным. Напимер: -a 127.0.0.1')
         client_sock.close()
         # raise ValueError
         return
@@ -57,4 +57,5 @@ def main():
     client_sock.close()
 
 
-main()
+if __name__ == '__main__':
+    main()
