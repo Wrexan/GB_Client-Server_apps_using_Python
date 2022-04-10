@@ -68,7 +68,7 @@ def handle_answer(msg):
 
 
 def main():
-    serv_ip, serv_port, client_mode = handle_parameters(ip=DEF_IP, port=DEF_PORT, mode='listen')
+    serv_ip, serv_port, client_mode = handle_parameters(ip=DEF_IP, port=DEF_PORT, mode='send')
     CLIENT_LOGGER.info(f'Клиент запущен. Использую SERVER IP:{serv_ip} PORT:{serv_port} MODE:{client_mode}')
 
     try:
