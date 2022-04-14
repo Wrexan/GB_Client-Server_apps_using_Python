@@ -1,5 +1,2 @@
-/lesson_07/log/client.log
-/lesson_07/log/server.log
-/lesson_08/log/server.log
-/lesson_08/log/server.log.2022-04-10
-/lesson_08/log/client.log
+*.log
+/practice_08/
