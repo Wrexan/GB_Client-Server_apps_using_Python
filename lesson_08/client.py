@@ -10,7 +10,7 @@
 import json
 import sys
 import threading
-from time import time, sleep
+from time import time, sleep, strftime, localtime
 from socket import socket, AF_INET, SOCK_STREAM
 from common.globals import ACTION, SENDER, DESTINATION, PRESENCE, RESPONSE, ERROR, EXIT, ONLINE,\
     TIME, USER, ACCOUNT_NAME, DEF_PORT, DEF_IP, MESSAGE, MESSAGE_TEXT
@@ -18,10 +18,12 @@ from common.utils import send_message, get_message, handle_parameters
 from common.errors import ReqFieldMissingError, ServerError
 import logging
 import log.client_log_config
+from log.decorator import log
 
 LOGGER = logging.getLogger('client')
 
 
+@log
 def message_from_server(sock, acc_name):
     while True:
         try:
@@ -37,15 +39,16 @@ def message_from_server(sock, acc_name):
                 LOGGER.debug(f'Получено сообщение от пользователя {msg[SENDER]}: {msg[MESSAGE_TEXT]}')
             else:
                 LOGGER.error(f'Получено некорректное сообщение с сервера: {msg}')
-        except Exception:
-            LOGGER.error(f'Не удалось декодировать полученное сообщение: {msg}')
+        except Exception as err:
+            LOGGER.error(f'Не удалось декодировать полученное сообщение: {msg} : {err}')
             break
         except (OSError, ConnectionError, ConnectionAbortedError,
-                ConnectionResetError, json.JSONDecodeError):
-            LOGGER.error(f'Потеряно соединение с сервером.')
+                ConnectionResetError, json.JSONDecodeError) as err:
+            LOGGER.error(f'Потеряно соединение с сервером: {err}')
             break
 
 
+@log
 def create_message(sock, acc_name, dest_name, msg):
     message_dict = {
         ACTION: MESSAGE,
@@ -57,11 +60,12 @@ def create_message(sock, acc_name, dest_name, msg):
     try:
         send_message(sock, message_dict)
         LOGGER.debug(f'Отправлено сообщение для пользователя {dest_name}')
-    except:
-        LOGGER.error('Потеряно соединение с сервером.')
+    except Exception as err:
+        LOGGER.error(f'Потеряно соединение с сервером: {err}')
         sys.exit(1)
 
 
+@log
 def create_service_message(acc_name, mgs_type):
     if mgs_type == PRESENCE:
         LOGGER.debug(f'Сформировано {PRESENCE} сообщение для пользователя {acc_name}')
@@ -89,6 +93,7 @@ def create_service_message(acc_name, mgs_type):
         }
 
 
+@log
 def handle_answer(msg):
     if RESPONSE in msg:
         if msg[RESPONSE] == 200:
@@ -109,6 +114,7 @@ def print_help():
     print('/q или /й - выход из программы')
 
 
+@log
 def UI(sock, acc_name):
     print_help()
     while True:
@@ -119,6 +125,7 @@ def UI(sock, acc_name):
             send_message(sock, create_service_message(acc_name, EXIT))
             print('Завершение работы')
             LOGGER.info('Завершение работы по команде пользователя.')
+            sleep(1)
             sys.exit(0)
 
         elif command in ['/h', '/?']:
@@ -139,28 +146,35 @@ def UI(sock, acc_name):
 
 
 def main():
+    LOGGER.debug('=' * 40 + '[ SERVER LOG START TIME: ' + strftime("%a, %d %b %Y %H:%M:%S ]", localtime()) + '=' * 40)
     try:
         serv_ip, serv_port, acc_name = handle_parameters(ip=DEF_IP, port=DEF_PORT)
-        print('Клиент системы обмена сообщениями. ВЕРСИЯ 015 БУ. ГОСТ 189-27-1956.')
+        print('*' * 100 + '\n Клиент системы обмена сообщениями. ВЕРСИЯ 015 БУ. ГОСТ 189-27-1956.\n' + '*' * 100)
         if not acc_name:
             acc_name = input('Представьтесь: ')
-        print(f'Приветствуем, {acc_name}.\n'
-              f'Напоминаем, что вы несете полную ответственность за свои слова в соответствии с законодательнвом.\n'
-              f'Приятного общения.')
-        sleep(1)
+        print(f' Приветствуем, {acc_name}.\n'
+              f' Напоминаем, что вы несете полную ответственность за свои слова в соответствии с законодательнвом.\n'
+              f' Приятного общения.\n' + '*' * 100)
         LOGGER.info(f'Клиент запущен. Использую SERVER IP:{serv_ip} PORT:{serv_port} NAME:{acc_name}')
 
         try:
-            LOGGER.debug(f'Попытка соедиения...')
             my_sock = socket(AF_INET, SOCK_STREAM)
-            my_sock.connect((serv_ip, serv_port))
-            LOGGER.debug(f'Отправляю сообщение о присутствии...')
-            send_message(my_sock, create_service_message(acc_name, PRESENCE))
-            LOGGER.debug(f'Жду ответа от сервера...')
-            answer = handle_answer(get_message(my_sock))
-            LOGGER.info(f'Соединение установлено')
-            LOGGER.debug(f'Получен ответ сервера: {answer}')
-            print(f'Соединение установлено')
+            for _ in range(5):
+                try:
+                    LOGGER.debug(f'[{acc_name}]: Попытка соедиения...')
+                    my_sock.connect((serv_ip, serv_port))
+                    LOGGER.debug(f'Отправляю сообщение о присутствии...')
+                    send_message(my_sock, create_service_message(acc_name, PRESENCE))
+                    LOGGER.debug(f'Жду ответа от сервера...')
+                    answer = handle_answer(get_message(my_sock))
+                    LOGGER.info(f'Соединение установлено')
+                    LOGGER.debug(f'Получен ответ сервера: {answer}')
+                    break
+                except (ConnectionRefusedError, ConnectionError):
+                    LOGGER.debug(f'Сервер не отвечает {serv_ip}:{serv_port}')
+        except (ConnectionRefusedError, ConnectionError):
+            LOGGER.info(f'Не удалось подключиться к серверу {serv_ip}:{serv_port}, '
+                        f'сервер отверг запрос на подключение.')
         except json.JSONDecodeError:
             LOGGER.error('Не удалось декодировать полученную Json строку.')
             sys.exit(1)
@@ -170,11 +184,8 @@ def main():
         except ReqFieldMissingError as missing_error:
             LOGGER.error(f'В ответе сервера отсутствует необходимое поле {missing_error.missing_field}')
             sys.exit(1)
-        except (ConnectionRefusedError, ConnectionError):
-            LOGGER.info(f'Не удалось подключиться к серверу {serv_ip}:{serv_port}, '
-                        f'сервер отверг запрос на подключение.')
-            sys.exit(1)
         else:
+            print(f'Соединение установлено')
             thread_receiver = threading.Thread(target=message_from_server, args=(my_sock, acc_name))
             thread_receiver.daemon = True
             thread_receiver.start()

@@ -5,7 +5,7 @@ import logging
 
 
 sys.path.append(os.path.join(os.getcwd(), '..'))
-from common.globals import ENCODING, MAX_PACKAGE_LENGTH, DEF_IP
+from common.globals import ENCODING, MAX_PACKAGE_LENGTH, DEF_IP, ERROR
 import log.client_log_config
 from log.decorator import log
 LOGGER = logging.getLogger('server') if 'server.py' in sys.argv[0] else logging.getLogger('client')
@@ -15,10 +15,9 @@ LOGGER = logging.getLogger('server') if 'server.py' in sys.argv[0] else logging.
 def get_message(sender_sock):
     try:
         encoded_data = sender_sock.recv(MAX_PACKAGE_LENGTH)
-    except (ConnectionResetError, ConnectionError, ConnectionAbortedError):
-        LOGGER.debug(f'Соединение разорвано/потеряно.')
+    except (ConnectionResetError, ConnectionAbortedError, ConnectionError) as err:
+        LOGGER.debug(f'Соединение сброшено: {err}')
         return
-        # sys.exit(1)
     if encoded_data:
         str_response, response = None, None
         if isinstance(encoded_data, bytes):

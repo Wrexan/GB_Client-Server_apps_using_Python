@@ -11,53 +11,58 @@ from socket import socket, AF_INET, SOCK_STREAM, SOL_SOCKET, SO_REUSEADDR
 from common.globals import DEF_PORT, ACTION, PRESENCE, TIME, USER, ACCOUNT_NAME, SENDER, DESTINATION, \
     RESPONSE, ERROR, EXIT, ONLINE, MAX_CONNECTIONS, MESSAGE, MESSAGE_TEXT
 from common.utils import get_message, send_message, handle_parameters
-from time import time
+from time import time, localtime, strftime
 import logging
 import select
 import log.server_log_config
+from log.decorator import log
 
 LOGGER = logging.getLogger('server')
 
 
+@log
 def handle_connection(msg, cli_sock, cli_ip, msg_list, clients, cli_socks):
     LOGGER.debug(f'Проверка типа сообщения: {msg}')
     # Запрос подключения
-    if ACTION in msg and TIME in msg and USER in msg:
-        cli_name = msg[USER][ACCOUNT_NAME]
-        if msg[ACTION] == PRESENCE:
-            if cli_name in clients.keys():
-                send_message(cli_sock, {
-                    RESPONSE: 400,
-                    ERROR: 'Имя занято'})
-                cli_socks.remove(cli_sock)
-                cli_sock.close()
-            else:
-                clients[cli_name] = cli_sock
-                LOGGER.info(f'Подключился: {cli_ip} {cli_name}')
-                send_message(cli_sock, {RESPONSE: 200})
-            return
+    if ACTION in msg:
+        if TIME in msg and USER in msg:
+            cli_name = msg[USER][ACCOUNT_NAME]
+            if msg[ACTION] == PRESENCE:
+                if cli_name in clients.keys():
+                    LOGGER.info(f'Имя занято: {cli_ip} {cli_name}')
+                    send_message(cli_sock, {
+                        RESPONSE: 400,
+                        ERROR: 'Имя занято'})
+                    cli_socks.remove(cli_sock)
+                    cli_sock.close()
+                else:
+                    clients[cli_name] = cli_sock
+                    LOGGER.info(f'>>>>>> Подключился: {cli_ip} {cli_name}')
+                    send_message(cli_sock, {RESPONSE: 200})
+                return
     # Запрос списка пользователей
-        elif msg[ACTION] == ONLINE:
-            LOGGER.info(f'Получен запрос списка собеседников от: {cli_ip} {cli_name}')
-            send_message(clients[cli_name], {
-                ACTION: MESSAGE,
-                TIME: time(),
-                SENDER: 'SERVER',
-                DESTINATION: cli_name,
-                MESSAGE_TEXT: f'{" ".join(clients.keys())}'})
-            return
+            elif msg[ACTION] == ONLINE:
+                LOGGER.info(f'Получен запрос списка собеседников от: {cli_ip} {cli_name}')
+                send_message(clients[cli_name], {
+                    ACTION: MESSAGE,
+                    TIME: time(),
+                    SENDER: 'SERVER',
+                    DESTINATION: cli_name,
+                    MESSAGE_TEXT: f'{" ".join(clients.keys())}'})
+                return
     # Сообщение
-    elif ACTION in msg and msg[ACTION] == MESSAGE and TIME in msg and \
-            SENDER in msg and DESTINATION in msg and MESSAGE_TEXT in msg:
-        msg_list.append(msg)
-        LOGGER.debug(f'Сообщение типа MESSAGE добавлено в обработку: {msg[MESSAGE_TEXT]}')
-        return
+        elif msg[ACTION] == MESSAGE and TIME in msg and \
+                SENDER in msg and DESTINATION in msg and MESSAGE_TEXT in msg:
+            if msg[MESSAGE_TEXT]:
+                msg_list.append(msg)
+                LOGGER.debug(f'Сообщение типа MESSAGE добавлено в обработку: {msg[MESSAGE_TEXT]}')
+            return
     # Отключение
-    elif ACTION in msg and msg[ACTION] == EXIT and ACCOUNT_NAME in msg:
-        LOGGER.info(f'Отключился: {cli_ip} {msg[ACCOUNT_NAME]}')
-        del_sock(clients[msg[ACCOUNT_NAME]], cli_socks)
-        del clients[msg[ACCOUNT_NAME]]
-        return
+        elif msg[ACTION] == EXIT and ACCOUNT_NAME in msg:
+            LOGGER.info(f'<<<<<< Отключился: {cli_ip} {msg[ACCOUNT_NAME]}')
+            del_sock(cli_sock, cli_socks)
+            del clients[msg[ACCOUNT_NAME]]
+            return
     # Ошибки
     else:
         LOGGER.error(f'Ошибка: Не удается обработать запрос:\n{msg}')
@@ -67,6 +72,7 @@ def handle_connection(msg, cli_sock, cli_ip, msg_list, clients, cli_socks):
         return
 
 
+@log
 def handle_message(msg, clients, cli_socks):
     dest_cli, send_cli = msg[DESTINATION], msg[SENDER]
     LOGGER.debug(f'{dest_cli=} {send_cli=}')
@@ -83,7 +89,8 @@ def handle_message(msg, clients, cli_socks):
         LOGGER.error(f'Ошибка: {dest_cli} Пропал вслед за кораблем')
         raise ConnectionError
     else:
-        # LOGGER.debug(f'Отправляю {send_cli} сообщение: Пользователь {dest_cli} не найден, неудалось доставить: {msg}')
+        LOGGER.debug(f'Отправляю {send_cli} сообщение: Пользователь {dest_cli} не найден, '
+                     f'неудалось доставить: {msg[MESSAGE_TEXT]}')
         send_message(clients[send_cli], {
             ACTION: MESSAGE,
             TIME: time(),
@@ -94,12 +101,14 @@ def handle_message(msg, clients, cli_socks):
                      f'{msg[MESSAGE_TEXT]}')
 
 
+@log
 def del_sock(sock, sock_list):
-    sock.close()
     sock_list.remove(sock)
+    sock.close()
 
 
 def main():
+    LOGGER.debug('=' * 40 + '[ SERVER LOG START TIME: ' + strftime("%a, %d %b %Y %H:%M:%S ]", localtime()) + '=' * 40)
     listen_address, listen_port, _ = handle_parameters(ip='', port=DEF_PORT)
     LOGGER.info(f'Сервер запущен. Слушаю IP:{listen_address if listen_address else "ANY"} '
                 f'PORT:{listen_port}')
@@ -116,38 +125,42 @@ def main():
     serv_sock.listen(MAX_CONNECTIONS)
     try:
         while True:
+            # Ждём подключения, если таймаут вышел, ловим исключение.
             try:
                 client_sock, client_address = serv_sock.accept()
             except OSError:
                 pass
             else:
-                LOGGER.debug(f'Подключение: {client_address}')
+                LOGGER.debug(f'>>> Подключение: {client_address}')
                 cli_socks.append(client_sock)
 
             recv_data_list = []
             send_data_list = []
+
+            # Проверяем на наличие ждущих клиентов
             try:
                 if cli_socks:
                     recv_data_list, send_data_list, _ = select.select(cli_socks, cli_socks, [], 0)
             except OSError:
                 pass
 
+            # принимаем сообщения и если ошибка, исключаем клиента.
             if recv_data_list:
                 for client_with_msg in recv_data_list:
                     try:
                         recvd_msg = get_message(client_with_msg)
+                        LOGGER.info(f'Получено сообщение: {recvd_msg}')
                         if recvd_msg:
-                            handle_connection(recvd_msg, client_with_msg, client_address, msgs, clients, cli_socks)
+                            handle_connection(recvd_msg, client_with_msg, client_address,
+                                              msgs, clients, cli_socks)
                         else:
-                            LOGGER.info(f'{client_with_msg.getpeername()} отключился')
-                            # del_sock(client_with_msg, cli_socks)
-                            cli_socks.remove(client_with_msg)
-                            del clients[client_with_msg.getpeername()]
-                    except:
-                        LOGGER.info(f'{client_with_msg.getpeername()} отключился')
-                        # del_sock(client_with_msg, cli_socks)
-                        cli_socks.remove(client_with_msg)
-                        del clients[client_with_msg.getpeername()]
+                            # Если получаем пустое сообщение после разрыва соединения
+                            LOGGER.info(f'<<<<<< Отключился: {client_with_msg.getpeername()}')
+                            cli_socks.remove(client_with_msg.getpeername())
+                    except Exception as err:
+                        LOGGER.info(f'{client_with_msg.getpeername()} '
+                                    f'отключился (ошибка обработки сообщения: {recvd_msg}): {err}')
+                        cli_socks.remove(client_with_msg.getpeername())
 
             for m in msgs:
                 try:
